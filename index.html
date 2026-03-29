@@ -521,14 +521,8 @@ fileInput.addEventListener('change', () => {
   }
 });
 
-// ── Step 2: tabella sempre visibile, event delegation ──────
-const dataTbody = document.getElementById('data-tbody');
-dataTbody.addEventListener('input',  syncDataFromTable);
-dataTbody.addEventListener('change', syncDataFromTable);
-
 // Inizializza Step 2 con 3 righe vuote
-for (let i = 0; i < 3; i++) addDataRow(false);
-renderDataTable();
+for (let i = 0; i < 3; i++) addDataRow();
 
 // ── Multi-file dispatcher ──────────────────────────────────
 async function processFiles(fileList) {
@@ -771,60 +765,68 @@ function estraiGiorni(data, colG, colS) {
   }).filter(r => r.minimo >= 0);
 }
 
-// ── Step 2: tabella editabile ──────────────────────────────
-function renderDataTable() {
+// ── Step 2: tabella editabile (ID-based, no full re-render) ─
+let _nextRowId = 0;
+
+function _appendRow(id, giorno, minimo) {
   const tbody = document.getElementById('data-tbody');
-  tbody.innerHTML = giorni.map((r, i) => `
-    <tr>
-      <td><input class="manual-input" type="date" value="${toISODate(r.giorno)}"
-        onchange="giorni[${i}].giorno = this.value ? formatDate(this.value) : giorni[${i}].giorno" /></td>
-      <td><input class="manual-input" type="number" step="0.01" min="0" value="${r.minimo > 0 ? r.minimo.toFixed(2) : ''}"
-        placeholder="0.00" onchange="giorni[${i}].minimo = parseFloat(this.value) || 0" /></td>
-      <td style="text-align:center">
-        <button class="btn-delete" onclick="deleteDataRow(${i})">×</button>
-      </td>
-    </tr>`).join('');
-  const countEl = document.getElementById('data-count');
-  countEl.textContent = giorni.length ? `${giorni.length} giorni` : '';
+  const tr = document.createElement('tr');
+  tr.dataset.rowId = id;
+  tr.innerHTML = `
+    <td><input class="manual-input" type="date" value="${toISODate(giorno)}"
+      onchange="_updateGiorno(${id}, this.value)" /></td>
+    <td><input class="manual-input" type="number" step="0.01" min="0"
+      value="${minimo > 0 ? minimo.toFixed(2) : ''}" placeholder="0.00"
+      onchange="_updateMinimo(${id}, this.value)" /></td>
+    <td style="text-align:center">
+      <button class="btn-delete" onclick="deleteRowById(${id})">×</button>
+    </td>`;
+  tbody.appendChild(tr);
+  return tr;
 }
 
-function addDataRow(render = true) {
-  giorni.push({ giorno: '', minimo: 0 });
-  if (render) {
-    renderDataTable();
-    const tbody = document.getElementById('data-tbody');
-    if (tbody.lastElementChild)
-      tbody.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+function _updateGiorno(id, val) {
+  const r = giorni.find(r => r.id === id);
+  if (r) r.giorno = val ? formatDate(val) : '';
+}
+function _updateMinimo(id, val) {
+  const r = giorni.find(r => r.id === id);
+  if (r) r.minimo = parseFloat(String(val).replace(',', '.')) || 0;
+}
+function _updateCount() {
+  document.getElementById('data-count').textContent =
+    giorni.length ? `${giorni.length} giorni` : '';
 }
 
-function deleteDataRow(index) {
-  giorni.splice(index, 1);
-  renderDataTable();
+// Popola la tabella da giorni[] (usato dopo import file)
+function renderDataTable() {
+  _nextRowId = 0;
+  giorni = giorni.map(r => ({ ...r, id: _nextRowId++ }));
+  document.getElementById('data-tbody').innerHTML = '';
+  giorni.forEach(r => _appendRow(r.id, r.giorno, r.minimo));
+  _updateCount();
 }
 
-function syncDataFromTable() {
-  const rows = document.querySelectorAll('#data-tbody tr');
-  const data = [];
-  let idx = 0;
-  for (const row of rows) {
-    const inputs  = row.querySelectorAll('input');
-    if (inputs.length < 2) continue;
-    const rawDate = inputs[0].value.trim();
-    const rawNum  = inputs[1].value.trim();
-    if (!rawDate && !rawNum) continue;
-    const label = rawDate ? formatDate(rawDate) : `Giorno ${idx + 1}`;
-    const val   = parseFloat(rawNum.replace(',', '.'));
-    data.push({ giorno: label, minimo: isNaN(val) || val < 0 ? 0 : val });
-    idx++;
-  }
-  giorni = data;
-  const countEl = document.getElementById('data-count');
-  countEl.textContent = giorni.length ? `${giorni.length} giorni` : '';
+// Aggiunge una riga vuota in fondo senza toccare le altre
+function addDataRow() {
+  const id = _nextRowId++;
+  giorni.push({ id, giorno: '', minimo: 0 });
+  const tr = _appendRow(id, '', 0);
+  tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  _updateCount();
+}
+
+// Elimina solo la riga con quell'id
+function deleteRowById(id) {
+  giorni = giorni.filter(r => r.id !== id);
+  const row = document.querySelector(`#data-tbody tr[data-row-id="${id}"]`);
+  if (row) row.remove();
+  _updateCount();
 }
 
 function goToBudget() {
-  syncDataFromTable();
+  // Filtra righe completamente vuote
+  giorni = giorni.filter(r => r.giorno || r.minimo > 0);
   if (!giorni.length) {
     setAlert('import-alert', 'error', 'Inserisci almeno una riga nello Step 2.');
     return;
