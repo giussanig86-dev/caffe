@@ -281,29 +281,6 @@
 
     .hidden { display: none !important; }
 
-    /* ── TABS ───────────────────────────────────────── */
-    .tabs {
-      display: flex;
-      gap: 0;
-      margin-bottom: 22px;
-      border-bottom: 1px solid #5a3a22;
-    }
-    .tab-btn {
-      padding: 9px 20px;
-      background: transparent;
-      border: none;
-      border-bottom: 2px solid transparent;
-      color: #c4956a;
-      cursor: pointer;
-      font-family: 'Poppins', sans-serif;
-      font-weight: 600;
-      font-size: 0.88rem;
-      margin-bottom: -1px;
-      transition: color 0.15s, border-color 0.15s;
-    }
-    .tab-btn:hover { color: #f5e6d3; }
-    .tab-btn.active { color: #f5c842; border-bottom-color: #f5c842; }
-
     /* ── MANUAL ENTRY ───────────────────────────────── */
     .manual-input {
       width: 100%;
@@ -382,91 +359,75 @@
 
 <main class="main">
 
-  <!-- ── STEP 1: IMPORT ───────────────────────────────── -->
+  <!-- ── STEP 1: IMPORT FILE (opzionale) ─────────────────── -->
   <div class="card" id="card-import">
     <div class="card-title">
       <span class="step-badge">1</span>
-      Inserisci la tabella dei prezzi giornalieri
+      Importa da file (opzionale)
     </div>
 
-    <div class="tabs">
-      <button class="tab-btn active" id="btn-tab-file"   onclick="switchTab('file')">📂 Carica file</button>
-      <button class="tab-btn"        id="btn-tab-manual" onclick="switchTab('manual')">✏️ Inserisci manualmente</button>
+    <div class="drop-zone" id="dropZone">
+      <div class="dz-icon">📂</div>
+      <div class="dz-text">Trascina qui uno o più file oppure clicca per selezionare</div>
+      <button class="btn btn-secondary" id="btnSelectFile">Sfoglia file</button>
+      <div class="format-badges">
+        <span class="badge badge-csv">CSV</span>
+        <span class="badge badge-excel">Excel .xlsx .xls</span>
+        <span class="badge badge-pdf">PDF</span>
+      </div>
     </div>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf" multiple>
 
-    <!-- Tab: carica file -->
-    <div id="tab-file">
-      <div class="drop-zone" id="dropZone">
-        <div class="dz-icon">📂</div>
-        <div class="dz-text">Trascina qui uno o più file oppure clicca per selezionare</div>
-        <button class="btn btn-secondary" id="btnSelectFile">Sfoglia file</button>
-        <div class="format-badges">
-          <span class="badge badge-csv">CSV</span>
-          <span class="badge badge-excel">Excel .xlsx .xls</span>
-          <span class="badge badge-pdf">PDF</span>
+    <!-- Mapping colonne — appare solo se auto-detect fallisce -->
+    <div id="col-mapping-wrap" class="hidden mt-16">
+      <div style="font-size:0.84rem; color:#c4956a; margin-bottom:12px; font-weight:500;">
+        Seleziona le colonne corrispondenti
+      </div>
+      <div id="col-single">
+        <div class="col-grid">
+          <div class="form-group">
+            <label>Colonna — Giorno / Data</label>
+            <select id="colGiorno"></select>
+          </div>
+          <div class="form-group">
+            <label>Colonna — Spesa minima (€)</label>
+            <select id="colSpesa"></select>
+          </div>
         </div>
       </div>
-      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf" multiple>
-    </div>
-
-    <!-- Tab: inserimento manuale -->
-    <div id="tab-manual" class="hidden">
-      <div class="table-wrap">
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Giorno / Data</th>
-                <th style="text-align:right">Spesa minima (€)</th>
-                <th style="text-align:center">Elimina</th>
-              </tr>
-            </thead>
-            <tbody id="manual-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-      <button class="add-row-btn" onclick="addRigaManuale()">+ Aggiungi riga</button>
-      <div style="margin-top:16px">
-        <button class="btn btn-primary" onclick="confermaManuale()">Conferma e prosegui →</button>
-      </div>
+      <div id="col-perfile" class="hidden"></div>
+      <button class="btn btn-primary" onclick="applicaMapping()">Applica</button>
     </div>
 
     <div id="import-alert" class="hidden mt-16"></div>
   </div>
 
-  <!-- ── STEP 2: COLUMN MAPPING ───────────────────────── -->
-  <div class="card hidden" id="card-columns">
+  <!-- ── STEP 2: TABELLA GIORNI (sempre visibile) ──────── -->
+  <div class="card" id="card-columns">
     <div class="card-title">
       <span class="step-badge">2</span>
-      <span id="step2-title">Mappa le colonne</span>
+      Giorni e prezzi minimi
     </div>
 
-    <!-- Modalità singola (tutti i file hanno la stessa struttura) -->
-    <div id="col-single">
-      <div class="col-grid">
-        <div class="form-group">
-          <label>Colonna — Giorno / Data</label>
-          <select id="colGiorno"></select>
-        </div>
-        <div class="form-group">
-          <label>Colonna — Spesa minima (€)</label>
-          <select id="colSpesa"></select>
-        </div>
+    <div class="table-wrap">
+      <div class="table-scroll-tall">
+        <table>
+          <thead>
+            <tr>
+              <th>Giorno / Data</th>
+              <th style="text-align:right">Spesa minima (€)</th>
+              <th style="text-align:center">Elimina</th>
+            </tr>
+          </thead>
+          <tbody id="data-tbody"></tbody>
+        </table>
       </div>
     </div>
-
-    <!-- Modalità per-file (strutture diverse) -->
-    <div id="col-perfile" class="hidden"></div>
-
-    <button class="btn btn-primary" id="btn-conferma-colonne" onclick="confermaColonne()">Conferma e anteprima</button>
-
-    <div class="table-wrap hidden" id="preview-wrap">
-      <div class="table-scroll">
-        <table id="preview-table"></table>
-      </div>
+    <div id="data-count" class="preview-count" style="margin-top:10px"></div>
+    <button class="add-row-btn" onclick="addDataRow()" style="margin-top:10px">+ Aggiungi riga</button>
+    <div class="mt-16">
+      <button class="btn btn-primary" onclick="goToBudget()">Vai al budget →</button>
     </div>
-    <div id="preview-count" class="preview-count hidden"></div>
-    <button class="add-row-btn hidden" id="btn-add-preview-row" onclick="aggiungiRigaPreview()" style="margin-top:12px">+ Aggiungi riga</button>
   </div>
 
   <!-- ── STEP 3: BUDGET ────────────────────────────────── -->
@@ -545,9 +506,6 @@ const fileInput = document.getElementById('fileInput');
 const btnSelect = document.getElementById('btnSelectFile');
 
 btnSelect.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
-const manualTbody = document.getElementById('manual-tbody');
-manualTbody.addEventListener('input',  syncManualToPreview);
-manualTbody.addEventListener('change', syncManualToPreview);
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
@@ -559,9 +517,18 @@ dropZone.addEventListener('drop', e => {
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length) {
     processFiles(fileInput.files);
-    fileInput.value = ''; // reset so the same file can be re-selected
+    fileInput.value = '';
   }
 });
+
+// ── Step 2: tabella sempre visibile, event delegation ──────
+const dataTbody = document.getElementById('data-tbody');
+dataTbody.addEventListener('input',  syncDataFromTable);
+dataTbody.addEventListener('change', syncDataFromTable);
+
+// Inizializza Step 2 con 3 righe vuote
+for (let i = 0; i < 3; i++) addDataRow(false);
+renderDataTable();
 
 // ── Multi-file dispatcher ──────────────────────────────────
 async function processFiles(fileList) {
@@ -572,7 +539,7 @@ async function processFiles(fileList) {
 
   const label = files.length === 1 ? `"${files[0].name}"` : `${files.length} file`;
   setAlert('import-alert', 'warning', `Caricamento di ${label}…`);
-  hideEl('card-columns');
+  hideEl('col-mapping-wrap');
   hideEl('card-budget');
   hideEl('card-results');
 
@@ -709,80 +676,75 @@ async function parsePDF(file) {
 
 // ── Column mapping — struttura unica ──────────────────────
 function setupColumnMapping() {
-  document.getElementById('step2-title').textContent = 'Mappa le colonne';
-  showEl('card-columns');
-  showEl('col-single');
-  hideEl('col-perfile');
-  showEl('btn-conferma-colonne');
-  hideEl('preview-wrap');
-  hideEl('btn-add-preview-row');
-
-  const selG = document.getElementById('colGiorno');
-  const selS = document.getElementById('colSpesa');
-  selG.innerHTML = '';
-  selS.innerHTML = '';
-
-  headers.forEach(h => {
-    selG.innerHTML += `<option value="${escHtml(h)}">${escHtml(h)}</option>`;
-    selS.innerHTML += `<option value="${escHtml(h)}">${escHtml(h)}</option>`;
-  });
-
   const autoG = headers.find(h => /giorn|data|day|date|periodo|mese/i.test(h));
   const autoS = headers.find(h => /spes|prez|cost|import|€|eur|tota|amount|val/i.test(h));
-  if (autoG) selG.value = autoG;
-  if (autoS) selS.value = autoS;
-  if (selG.value === selS.value && headers.length > 1)
-    selS.value = headers.find(h => h !== selG.value) || headers[headers.length - 1];
+
+  if (autoG && autoS && autoG !== autoS) {
+    giorni = estraiGiorni(rawData, autoG, autoS);
+    renderDataTable();
+    hideEl('col-mapping-wrap');
+  } else {
+    showEl('col-mapping-wrap');
+    showEl('col-single');
+    hideEl('col-perfile');
+    const selG = document.getElementById('colGiorno');
+    const selS = document.getElementById('colSpesa');
+    selG.innerHTML = headers.map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
+    selS.innerHTML = selG.innerHTML;
+    if (autoG) selG.value = autoG;
+    if (autoS) selS.value = autoS;
+    if (selG.value === selS.value && headers.length > 1)
+      selS.value = headers.find(h => h !== selG.value) || headers[headers.length - 1];
+  }
 }
 
 // ── Column mapping — strutture diverse ────────────────────
 function setupPerFileMapping() {
-  document.getElementById('step2-title').textContent = 'Mappa le colonne';
-  showEl('card-columns');
-  hideEl('col-single');
-  showEl('col-perfile');
-  showEl('btn-conferma-colonne');
-  hideEl('preview-wrap');
-  hideEl('btn-add-preview-row');
-
-  const container = document.getElementById('col-perfile');
-  container.innerHTML = parsedFiles.map((f, fi) => {
-    const opts = f.headers.map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
-    return `
-      <div class="file-block">
-        <div class="file-block-title">
-          📄 ${escHtml(f.name)}
-          <span class="file-block-rows">${f.data.length} righe</span>
-        </div>
-        <div class="col-grid">
-          <div class="form-group">
-            <label>Colonna — Giorno / Data</label>
-            <select id="colGiorno-${fi}">${opts}</select>
-          </div>
-          <div class="form-group">
-            <label>Colonna — Spesa minima (€)</label>
-            <select id="colSpesa-${fi}">${opts}</select>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-
-  // Auto-detect per file
-  parsedFiles.forEach((f, fi) => {
-    const selG = document.getElementById(`colGiorno-${fi}`);
-    const selS = document.getElementById(`colSpesa-${fi}`);
-    const autoG = f.headers.find(h => /giorn|data|day|date|periodo|mese/i.test(h));
-    const autoS = f.headers.find(h => /spes|prez|cost|import|€|eur|tota|amount|val/i.test(h));
-    if (autoG) selG.value = autoG;
-    if (autoS) selS.value = autoS;
-    if (selG.value === selS.value && f.headers.length > 1)
-      selS.value = f.headers.find(h => h !== selG.value) || f.headers[f.headers.length - 1];
+  const allAuto = parsedFiles.every(f => {
+    const g = f.headers.find(h => /giorn|data|day|date|periodo|mese/i.test(h));
+    const s = f.headers.find(h => /spes|prez|cost|import|€|eur|tota|amount|val/i.test(h));
+    return g && s && g !== s;
   });
+
+  if (allAuto) {
+    giorni = parsedFiles.flatMap(f => {
+      const g = f.headers.find(h => /giorn|data|day|date|periodo|mese/i.test(h));
+      const s = f.headers.find(h => /spes|prez|cost|import|€|eur|tota|amount|val/i.test(h));
+      return estraiGiorni(f.data, g, s);
+    });
+    renderDataTable();
+    hideEl('col-mapping-wrap');
+  } else {
+    showEl('col-mapping-wrap');
+    hideEl('col-single');
+    showEl('col-perfile');
+    const container = document.getElementById('col-perfile');
+    container.innerHTML = parsedFiles.map((f, fi) => {
+      const opts = f.headers.map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
+      return `
+        <div class="file-block">
+          <div class="file-block-title">📄 ${escHtml(f.name)}<span class="file-block-rows">${f.data.length} righe</span></div>
+          <div class="col-grid">
+            <div class="form-group"><label>Giorno / Data</label><select id="colGiorno-${fi}">${opts}</select></div>
+            <div class="form-group"><label>Spesa minima (€)</label><select id="colSpesa-${fi}">${opts}</select></div>
+          </div>
+        </div>`;
+    }).join('');
+    parsedFiles.forEach((f, fi) => {
+      const selG = document.getElementById(`colGiorno-${fi}`);
+      const selS = document.getElementById(`colSpesa-${fi}`);
+      const autoG = f.headers.find(h => /giorn|data|day|date|periodo|mese/i.test(h));
+      const autoS = f.headers.find(h => /spes|prez|cost|import|€|eur|tota|amount|val/i.test(h));
+      if (autoG) selG.value = autoG;
+      if (autoS) selS.value = autoS;
+      if (selG.value === selS.value && f.headers.length > 1)
+        selS.value = f.headers.find(h => h !== selG.value) || f.headers[f.headers.length - 1];
+    });
+  }
 }
 
-function confermaColonne() {
+function applicaMapping() {
   giorni = [];
-
   if (singleMapping) {
     const colG = document.getElementById('colGiorno').value;
     const colS = document.getElementById('colSpesa').value;
@@ -795,16 +757,9 @@ function confermaColonne() {
       giorni.push(...estraiGiorni(parsedFiles[fi].data, colG, colS));
     }
   }
-
-  if (!giorni.length) {
-    setAlert('import-alert', 'error', 'Nessun dato valido dopo il mapping. Controlla le colonne.');
-    return;
-  }
-
-  renderPreview();
-  showEl('preview-wrap');
-  showEl('card-budget');
-  document.getElementById('card-budget').scrollIntoView({ behavior: 'smooth' });
+  if (!giorni.length) { setAlert('import-alert', 'error', 'Nessun dato valido. Controlla le colonne.'); return; }
+  hideEl('col-mapping-wrap');
+  renderDataTable();
 }
 
 function estraiGiorni(data, colG, colS) {
@@ -816,133 +771,62 @@ function estraiGiorni(data, colG, colS) {
   }).filter(r => r.minimo >= 0);
 }
 
-function renderPreview() {
-  const tbl = document.getElementById('preview-table');
-  tbl.innerHTML = `
-    <thead>
-      <tr>
-        <th>Giorno / Data</th>
-        <th style="text-align:right">Spesa minima (€)</th>
-        <th style="text-align:center">Elimina</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${giorni.map((r, i) => `
-        <tr id="pr-row-${i}">
-          <td>
-            <input class="manual-input" type="date" value="${toISODate(r.giorno)}"
-              onchange="giorni[${i}].giorno = this.value ? formatDate(this.value) : giorni[${i}].giorno" />
-          </td>
-          <td>
-            <input class="manual-input" type="number" step="0.01" min="0"
-              value="${r.minimo.toFixed(2)}"
-              onchange="giorni[${i}].minimo = parseFloat(this.value) || 0" />
-          </td>
-          <td style="text-align:center">
-            <button class="btn-delete" onclick="eliminaRiga(${i})" title="Elimina riga">×</button>
-          </td>
-        </tr>`).join('')}
-    </tbody>`;
-
-  const countEl = document.getElementById('preview-count');
-  countEl.textContent = `${giorni.length} giorni`;
-  showEl('preview-count');
-  showEl('btn-add-preview-row');
+// ── Step 2: tabella editabile ──────────────────────────────
+function renderDataTable() {
+  const tbody = document.getElementById('data-tbody');
+  tbody.innerHTML = giorni.map((r, i) => `
+    <tr>
+      <td><input class="manual-input" type="date" value="${toISODate(r.giorno)}"
+        onchange="giorni[${i}].giorno = this.value ? formatDate(this.value) : giorni[${i}].giorno" /></td>
+      <td><input class="manual-input" type="number" step="0.01" min="0" value="${r.minimo > 0 ? r.minimo.toFixed(2) : ''}"
+        placeholder="0.00" onchange="giorni[${i}].minimo = parseFloat(this.value) || 0" /></td>
+      <td style="text-align:center">
+        <button class="btn-delete" onclick="deleteDataRow(${i})">×</button>
+      </td>
+    </tr>`).join('');
+  const countEl = document.getElementById('data-count');
+  countEl.textContent = giorni.length ? `${giorni.length} giorni` : '';
 }
 
-function eliminaRiga(index) {
+function addDataRow(render = true) {
+  giorni.push({ giorno: '', minimo: 0 });
+  if (render) {
+    renderDataTable();
+    const tbody = document.getElementById('data-tbody');
+    if (tbody.lastElementChild)
+      tbody.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function deleteDataRow(index) {
   giorni.splice(index, 1);
-  if (!giorni.length) {
-    hideEl('preview-wrap');
-    hideEl('preview-count');
-    hideEl('btn-add-preview-row');
-    hideEl('card-budget');
-    hideEl('card-results');
-    setAlert('import-alert', 'warning', 'Tutti i giorni sono stati eliminati. Ricarica il file o inserisci manualmente.');
-    return;
-  }
-  renderPreview();
+  renderDataTable();
 }
 
-function aggiungiRigaPreview() {
-  giorni.push({ giorno: `Giorno ${giorni.length + 1}`, minimo: 0 });
-  renderPreview();
-  // scroll to the new row
-  const tbody = document.querySelector('#preview-table tbody');
-  if (tbody) tbody.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-// ── Manual entry ───────────────────────────────────────────
-function switchTab(tab) {
-  const isFile = tab === 'file';
-  document.getElementById('tab-file').classList.toggle('hidden', !isFile);
-  document.getElementById('tab-manual').classList.toggle('hidden', isFile);
-  document.getElementById('btn-tab-file').classList.toggle('active', isFile);
-  document.getElementById('btn-tab-manual').classList.toggle('active', !isFile);
-  clearAlert('import-alert');
-  hideEl('card-budget');
-  hideEl('card-results');
-
-  if (!isFile) {
-    // Mostra subito Step 2 in modalità anteprima
-    hideEl('col-single');
-    hideEl('col-perfile');
-    hideEl('btn-conferma-colonne');
-    document.getElementById('step2-title').textContent = 'Anteprima dati';
-    showEl('card-columns');
-    if (document.getElementById('manual-tbody').children.length === 0) {
-      for (let i = 0; i < 3; i++) addRigaManuale();
-    }
-    syncManualToPreview();
-  } else {
-    hideEl('card-columns');
-  }
-}
-
-function addRigaManuale() {
-  const tbody = document.getElementById('manual-tbody');
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td><input class="manual-input" type="date" /></td>
-    <td><input class="manual-input" type="number" placeholder="0.00" step="0.01" min="0" /></td>
-    <td style="text-align:center">
-      <button class="btn-delete" onclick="deleteManualRow(this)">×</button>
-    </td>`;
-  tbody.appendChild(tr);
-  syncManualToPreview();
-}
-
-function deleteManualRow(btn) {
-  btn.closest('tr').remove();
-  syncManualToPreview();
-}
-
-function syncManualToPreview() {
-  const rows = document.querySelectorAll('#manual-tbody tr');
+function syncDataFromTable() {
+  const rows = document.querySelectorAll('#data-tbody tr');
   const data = [];
-  let i = 0;
+  let idx = 0;
   for (const row of rows) {
     const inputs  = row.querySelectorAll('input');
+    if (inputs.length < 2) continue;
     const rawDate = inputs[0].value.trim();
     const rawNum  = inputs[1].value.trim();
     if (!rawDate && !rawNum) continue;
-    const label = rawDate ? formatDate(rawDate) : `Giorno ${i + 1}`;
+    const label = rawDate ? formatDate(rawDate) : `Giorno ${idx + 1}`;
     const val   = parseFloat(rawNum.replace(',', '.'));
     data.push({ giorno: label, minimo: isNaN(val) || val < 0 ? 0 : val });
-    i++;
+    idx++;
   }
   giorni = data;
-  if (giorni.length) {
-    renderPreview();
-    showEl('preview-wrap');
-  } else {
-    hideEl('preview-wrap');
-  }
+  const countEl = document.getElementById('data-count');
+  countEl.textContent = giorni.length ? `${giorni.length} giorni` : '';
 }
 
-function confermaManuale() {
+function goToBudget() {
+  syncDataFromTable();
   if (!giorni.length) {
-    setAlert('import-alert', 'error', 'Inserisci almeno una riga.');
+    setAlert('import-alert', 'error', 'Inserisci almeno una riga nello Step 2.');
     return;
   }
   clearAlert('import-alert');
