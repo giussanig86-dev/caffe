@@ -333,6 +333,30 @@
     }
     .add-row-btn:hover { border-color: #f5c842; color: #f5c842; }
 
+    /* ── PER-FILE MAPPING ───────────────────────────── */
+    .file-block {
+      background: #1a1208;
+      border: 1px solid #5a3a22;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .file-block-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #f5c842;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .file-block-rows {
+      font-size: 0.75rem;
+      color: #c4956a;
+      font-weight: 400;
+      margin-left: auto;
+    }
+
     /* ── RESPONSIVE ─────────────────────────────────── */
     @media (max-width: 600px) {
       .header   { padding: 16px 20px; }
@@ -417,16 +441,22 @@
       Mappa le colonne
     </div>
 
-    <div class="col-grid">
-      <div class="form-group">
-        <label>Colonna — Giorno / Data</label>
-        <select id="colGiorno"></select>
-      </div>
-      <div class="form-group">
-        <label>Colonna — Spesa minima (€)</label>
-        <select id="colSpesa"></select>
+    <!-- Modalità singola (tutti i file hanno la stessa struttura) -->
+    <div id="col-single">
+      <div class="col-grid">
+        <div class="form-group">
+          <label>Colonna — Giorno / Data</label>
+          <select id="colGiorno"></select>
+        </div>
+        <div class="form-group">
+          <label>Colonna — Spesa minima (€)</label>
+          <select id="colSpesa"></select>
+        </div>
       </div>
     </div>
+
+    <!-- Modalità per-file (strutture diverse) -->
+    <div id="col-perfile" class="hidden"></div>
 
     <button class="btn btn-primary" onclick="confermaColonne()">Conferma e anteprima</button>
 
@@ -502,10 +532,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── State ──────────────────────────────────────────────────
-let rawData   = [];   // raw rows from file (array of objects)
-let headers   = [];   // column names
-let giorni    = [];   // [{giorno:string, minimo:number}]
-let risultati = [];   // [{giorno, minimo, assegnato}]
+let rawData      = [];     // raw rows from file (array of objects)
+let headers      = [];     // column names
+let parsedFiles  = [];     // [{name, data, headers}] — one entry per imported file
+let singleMapping = true;  // true = tutti i file hanno le stesse colonne
+let giorni       = [];     // [{giorno:string, minimo:number}]
+let risultati    = [];     // [{giorno, minimo, assegnato}]
 
 // ── Drag & drop + file input ───────────────────────────────
 const dropZone  = document.getElementById('dropZone');
@@ -533,6 +565,7 @@ async function processFiles(fileList) {
   const files = Array.from(fileList);
   rawData = [];
   headers = [];
+  parsedFiles = [];
 
   const label = files.length === 1 ? `"${files[0].name}"` : `${files.length} file`;
   setAlert('import-alert', 'warning', `Caricamento di ${label}…`);
@@ -540,31 +573,42 @@ async function processFiles(fileList) {
   hideEl('card-budget');
   hideEl('card-results');
 
-  const errors  = [];
+  const errors = [];
   let hasPdfWarning = false;
 
   for (const file of files) {
     try {
       const result = await parseFile(file);
-      if (!headers.length) headers = result.headers;
-      rawData.push(...result.data);
+      parsedFiles.push({ name: file.name, data: result.data, headers: result.headers });
       if (result.pdfWarning) hasPdfWarning = true;
     } catch (err) {
       errors.push(`${file.name}: ${err.message}`);
     }
   }
 
-  if (!rawData.length) {
+  if (!parsedFiles.length) {
     setAlert('import-alert', 'error',
       errors.length ? 'Errori: ' + errors.join(' | ') : 'Nessun dato trovato. Controlla i file.');
     return;
   }
 
-  let msg = `✓ ${rawData.length} righe importate da ${label}.`;
-  if (errors.length)     msg += ` ⚠ Errori in: ${errors.map(e => e.split(':')[0]).join(', ')}.`;
-  if (hasPdfWarning)     msg += ' PDF in modalità best-effort: verifica l\'anteprima.';
+  const totalRows = parsedFiles.reduce((s, f) => s + f.data.length, 0);
+  let msg = `✓ ${totalRows} righe importate da ${label}.`;
+  if (errors.length)   msg += ` ⚠ Errori in: ${errors.map(e => e.split(':')[0]).join(', ')}.`;
+  if (hasPdfWarning)   msg += ' PDF in modalità best-effort: verifica l\'anteprima.';
   setAlert('import-alert', errors.length ? 'warning' : 'success', msg);
-  setupColumnMapping();
+
+  // Controlla se tutti i file hanno le stesse colonne
+  const allHeaderKeys = parsedFiles.map(f => f.headers.join('§'));
+  singleMapping = allHeaderKeys.every(k => k === allHeaderKeys[0]);
+
+  if (singleMapping) {
+    rawData = parsedFiles.flatMap(f => f.data);
+    headers = parsedFiles[0].headers;
+    setupColumnMapping();
+  } else {
+    setupPerFileMapping();
+  }
 }
 
 // ── Single-file parser (returns {data, headers, pdfWarning}) ─
@@ -660,10 +704,13 @@ async function parsePDF(file) {
   return { data: rows, headers: ['Giorno', 'Spesa (€)'], pdfWarning: true };
 }
 
-// ── Column mapping ─────────────────────────────────────────
+// ── Column mapping — struttura unica ──────────────────────
 function setupColumnMapping() {
   showEl('card-columns');
+  showEl('col-single');
+  hideEl('col-perfile');
   hideEl('preview-wrap');
+  hideEl('btn-add-preview-row');
 
   const selG = document.getElementById('colGiorno');
   const selS = document.getElementById('colSpesa');
@@ -671,38 +718,76 @@ function setupColumnMapping() {
   selS.innerHTML = '';
 
   headers.forEach(h => {
-    selG.innerHTML += `<option value="${h}">${h}</option>`;
-    selS.innerHTML += `<option value="${h}">${h}</option>`;
+    selG.innerHTML += `<option value="${escHtml(h)}">${escHtml(h)}</option>`;
+    selS.innerHTML += `<option value="${escHtml(h)}">${escHtml(h)}</option>`;
   });
 
-  // Auto-detect columns by common keywords
   const autoG = headers.find(h => /giorn|data|day|date|periodo|mese/i.test(h));
   const autoS = headers.find(h => /spes|prez|cost|import|€|eur|tota|amount|val/i.test(h));
-
   if (autoG) selG.value = autoG;
   if (autoS) selS.value = autoS;
-
-  // Avoid same column selected for both
-  if (selG.value === selS.value && headers.length > 1) {
+  if (selG.value === selS.value && headers.length > 1)
     selS.value = headers.find(h => h !== selG.value) || headers[headers.length - 1];
-  }
+}
+
+// ── Column mapping — strutture diverse ────────────────────
+function setupPerFileMapping() {
+  showEl('card-columns');
+  hideEl('col-single');
+  showEl('col-perfile');
+  hideEl('preview-wrap');
+  hideEl('btn-add-preview-row');
+
+  const container = document.getElementById('col-perfile');
+  container.innerHTML = parsedFiles.map((f, fi) => {
+    const opts = f.headers.map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
+    return `
+      <div class="file-block">
+        <div class="file-block-title">
+          📄 ${escHtml(f.name)}
+          <span class="file-block-rows">${f.data.length} righe</span>
+        </div>
+        <div class="col-grid">
+          <div class="form-group">
+            <label>Colonna — Giorno / Data</label>
+            <select id="colGiorno-${fi}">${opts}</select>
+          </div>
+          <div class="form-group">
+            <label>Colonna — Spesa minima (€)</label>
+            <select id="colSpesa-${fi}">${opts}</select>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Auto-detect per file
+  parsedFiles.forEach((f, fi) => {
+    const selG = document.getElementById(`colGiorno-${fi}`);
+    const selS = document.getElementById(`colSpesa-${fi}`);
+    const autoG = f.headers.find(h => /giorn|data|day|date|periodo|mese/i.test(h));
+    const autoS = f.headers.find(h => /spes|prez|cost|import|€|eur|tota|amount|val/i.test(h));
+    if (autoG) selG.value = autoG;
+    if (autoS) selS.value = autoS;
+    if (selG.value === selS.value && f.headers.length > 1)
+      selS.value = f.headers.find(h => h !== selG.value) || f.headers[f.headers.length - 1];
+  });
 }
 
 function confermaColonne() {
-  const colG = document.getElementById('colGiorno').value;
-  const colS = document.getElementById('colSpesa').value;
+  giorni = [];
 
-  if (!colG || !colS) {
-    setAlert('import-alert', 'error', 'Seleziona entrambe le colonne.');
-    return;
+  if (singleMapping) {
+    const colG = document.getElementById('colGiorno').value;
+    const colS = document.getElementById('colSpesa').value;
+    if (!colG || !colS) { setAlert('import-alert', 'error', 'Seleziona entrambe le colonne.'); return; }
+    giorni = estraiGiorni(rawData, colG, colS);
+  } else {
+    for (let fi = 0; fi < parsedFiles.length; fi++) {
+      const colG = document.getElementById(`colGiorno-${fi}`).value;
+      const colS = document.getElementById(`colSpesa-${fi}`).value;
+      giorni.push(...estraiGiorni(parsedFiles[fi].data, colG, colS));
+    }
   }
-
-  giorni = rawData.map((row, i) => {
-    const label = String(row[colG] ?? '').trim() || `Giorno ${i + 1}`;
-    const raw   = String(row[colS] ?? '0').replace(',', '.').replace(/[^\d.]/g, '');
-    const val   = parseFloat(raw);
-    return { giorno: label, minimo: isNaN(val) ? 0 : val };
-  }).filter(r => r.minimo >= 0);
 
   if (!giorni.length) {
     setAlert('import-alert', 'error', 'Nessun dato valido dopo il mapping. Controlla le colonne.');
@@ -713,6 +798,15 @@ function confermaColonne() {
   showEl('preview-wrap');
   showEl('card-budget');
   document.getElementById('card-budget').scrollIntoView({ behavior: 'smooth' });
+}
+
+function estraiGiorni(data, colG, colS) {
+  return data.map((row, i) => {
+    const label = String(row[colG] ?? '').trim() || `Giorno ${i + 1}`;
+    const raw   = String(row[colS] ?? '0').replace(',', '.').replace(/[^\d.]/g, '');
+    const val   = parseFloat(raw);
+    return { giorno: label, minimo: isNaN(val) ? 0 : val };
+  }).filter(r => r.minimo >= 0);
 }
 
 function renderPreview() {
