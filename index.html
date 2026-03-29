@@ -545,7 +545,9 @@ const fileInput = document.getElementById('fileInput');
 const btnSelect = document.getElementById('btnSelectFile');
 
 btnSelect.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
-document.getElementById('manual-tbody').addEventListener('input', syncManualToPreview);
+const manualTbody = document.getElementById('manual-tbody');
+manualTbody.addEventListener('input',  syncManualToPreview);
+manualTbody.addEventListener('change', syncManualToPreview);
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
