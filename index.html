@@ -281,6 +281,58 @@
 
     .hidden { display: none !important; }
 
+    /* ── TABS ───────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 22px;
+      border-bottom: 1px solid #5a3a22;
+    }
+    .tab-btn {
+      padding: 9px 20px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #c4956a;
+      cursor: pointer;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 0.88rem;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: #f5e6d3; }
+    .tab-btn.active { color: #f5c842; border-bottom-color: #f5c842; }
+
+    /* ── MANUAL ENTRY ───────────────────────────────── */
+    .manual-input {
+      width: 100%;
+      padding: 6px 10px;
+      background: #1a1208;
+      border: 1px solid #5a3a22;
+      border-radius: 6px;
+      color: #f5e6d3;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.84rem;
+    }
+    .manual-input:focus { outline: none; border-color: #f5c842; }
+    .manual-input[type="number"] { text-align: right; }
+    .add-row-btn {
+      margin-top: 12px;
+      background: transparent;
+      border: 1px dashed #7a4f2e;
+      color: #c4956a;
+      border-radius: 8px;
+      padding: 8px 18px;
+      width: 100%;
+      cursor: pointer;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.84rem;
+      font-weight: 500;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .add-row-btn:hover { border-color: #f5c842; color: #f5c842; }
+
     /* ── RESPONSIVE ─────────────────────────────────── */
     @media (max-width: 600px) {
       .header   { padding: 16px 20px; }
@@ -310,20 +362,50 @@
   <div class="card" id="card-import">
     <div class="card-title">
       <span class="step-badge">1</span>
-      Importa la tabella dei prezzi giornalieri
+      Inserisci la tabella dei prezzi giornalieri
     </div>
 
-    <div class="drop-zone" id="dropZone">
-      <div class="dz-icon">📂</div>
-      <div class="dz-text">Trascina qui il file oppure clicca per selezionare</div>
-      <button class="btn btn-secondary" id="btnSelectFile">Sfoglia file</button>
-      <div class="format-badges">
-        <span class="badge badge-csv">CSV</span>
-        <span class="badge badge-excel">Excel .xlsx .xls</span>
-        <span class="badge badge-pdf">PDF</span>
+    <div class="tabs">
+      <button class="tab-btn active" id="btn-tab-file"   onclick="switchTab('file')">📂 Carica file</button>
+      <button class="tab-btn"        id="btn-tab-manual" onclick="switchTab('manual')">✏️ Inserisci manualmente</button>
+    </div>
+
+    <!-- Tab: carica file -->
+    <div id="tab-file">
+      <div class="drop-zone" id="dropZone">
+        <div class="dz-icon">📂</div>
+        <div class="dz-text">Trascina qui il file oppure clicca per selezionare</div>
+        <button class="btn btn-secondary" id="btnSelectFile">Sfoglia file</button>
+        <div class="format-badges">
+          <span class="badge badge-csv">CSV</span>
+          <span class="badge badge-excel">Excel .xlsx .xls</span>
+          <span class="badge badge-pdf">PDF</span>
+        </div>
+      </div>
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf">
+    </div>
+
+    <!-- Tab: inserimento manuale -->
+    <div id="tab-manual" class="hidden">
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Giorno / Data</th>
+                <th style="text-align:right">Spesa minima (€)</th>
+                <th style="text-align:center">Elimina</th>
+              </tr>
+            </thead>
+            <tbody id="manual-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <button class="add-row-btn" onclick="addRigaManuale()">+ Aggiungi riga</button>
+      <div style="margin-top:16px">
+        <button class="btn btn-primary" onclick="confermaManuale()">Conferma e prosegui</button>
       </div>
     </div>
-    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf">
 
     <div id="import-alert" class="hidden mt-16"></div>
   </div>
@@ -354,6 +436,7 @@
       </div>
     </div>
     <div id="preview-count" class="preview-count hidden"></div>
+    <button class="add-row-btn hidden" id="btn-add-preview-row" onclick="aggiungiRigaPreview()" style="margin-top:12px">+ Aggiungi riga</button>
   </div>
 
   <!-- ── STEP 3: BUDGET ────────────────────────────────── -->
@@ -649,8 +732,15 @@ function renderPreview() {
     <tbody>
       ${giorni.map((r, i) => `
         <tr id="pr-row-${i}">
-          <td>${escHtml(r.giorno)}</td>
-          <td style="text-align:right">€ ${r.minimo.toFixed(2)}</td>
+          <td>
+            <input class="manual-input" value="${escHtml(r.giorno)}"
+              onchange="giorni[${i}].giorno = this.value.trim() || 'Giorno ${i+1}'" />
+          </td>
+          <td>
+            <input class="manual-input" type="number" step="0.01" min="0"
+              value="${r.minimo.toFixed(2)}"
+              onchange="giorni[${i}].minimo = parseFloat(this.value) || 0" />
+          </td>
           <td style="text-align:center">
             <button class="btn-delete" onclick="eliminaRiga(${i})" title="Elimina riga">×</button>
           </td>
@@ -658,8 +748,9 @@ function renderPreview() {
     </tbody>`;
 
   const countEl = document.getElementById('preview-count');
-  countEl.textContent = `${giorni.length} giorni selezionati`;
+  countEl.textContent = `${giorni.length} giorni`;
   showEl('preview-count');
+  showEl('btn-add-preview-row');
 }
 
 function eliminaRiga(index) {
@@ -667,12 +758,76 @@ function eliminaRiga(index) {
   if (!giorni.length) {
     hideEl('preview-wrap');
     hideEl('preview-count');
+    hideEl('btn-add-preview-row');
     hideEl('card-budget');
     hideEl('card-results');
-    setAlert('import-alert', 'warning', 'Tutti i giorni sono stati eliminati. Ricarica il file.');
+    setAlert('import-alert', 'warning', 'Tutti i giorni sono stati eliminati. Ricarica il file o inserisci manualmente.');
     return;
   }
   renderPreview();
+}
+
+function aggiungiRigaPreview() {
+  giorni.push({ giorno: `Giorno ${giorni.length + 1}`, minimo: 0 });
+  renderPreview();
+  // scroll to the new row
+  const tbody = document.querySelector('#preview-table tbody');
+  if (tbody) tbody.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Manual entry ───────────────────────────────────────────
+function switchTab(tab) {
+  const isFile = tab === 'file';
+  document.getElementById('tab-file').classList.toggle('hidden', !isFile);
+  document.getElementById('tab-manual').classList.toggle('hidden', isFile);
+  document.getElementById('btn-tab-file').classList.toggle('active', isFile);
+  document.getElementById('btn-tab-manual').classList.toggle('active', !isFile);
+  clearAlert('import-alert');
+  hideEl('card-columns');
+  hideEl('card-budget');
+  hideEl('card-results');
+  if (!isFile && document.getElementById('manual-tbody').children.length === 0) {
+    for (let i = 0; i < 3; i++) addRigaManuale();
+  }
+}
+
+function addRigaManuale() {
+  const tbody = document.getElementById('manual-tbody');
+  const n = tbody.children.length + 1;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="manual-input" placeholder="es. Lunedì ${n}" /></td>
+    <td><input class="manual-input" type="number" placeholder="0.00" step="0.01" min="0" /></td>
+    <td style="text-align:center">
+      <button class="btn-delete" onclick="this.closest('tr').remove()" title="Elimina riga">×</button>
+    </td>`;
+  tbody.appendChild(tr);
+  tr.querySelector('input').focus();
+}
+
+function confermaManuale() {
+  const rows = document.querySelectorAll('#manual-tbody tr');
+  const parsed = [];
+  let i = 0;
+  for (const row of rows) {
+    const inputs = row.querySelectorAll('input');
+    const label  = inputs[0].value.trim() || `Giorno ${i + 1}`;
+    const val    = parseFloat(inputs[1].value);
+    if (!isNaN(val) && val >= 0) {
+      parsed.push({ giorno: label, minimo: val });
+      i++;
+    }
+  }
+  if (!parsed.length) {
+    setAlert('import-alert', 'error', 'Inserisci almeno una riga con un valore valido.');
+    return;
+  }
+  giorni = parsed;
+  clearAlert('import-alert');
+  setAlert('import-alert', 'success', `✓ ${giorni.length} giorni confermati.`);
+  hideEl('card-columns');
+  showEl('card-budget');
+  document.getElementById('card-budget').scrollIntoView({ behavior: 'smooth' });
 }
 
 // ── Distribution algorithm ─────────────────────────────────
