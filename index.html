@@ -427,20 +427,7 @@
       </div>
       <button class="add-row-btn" onclick="addRigaManuale()">+ Aggiungi riga</button>
       <div style="margin-top:16px">
-        <button class="btn btn-primary" onclick="confermaManuale()">Conferma e prosegui</button>
-      </div>
-
-      <!-- Preview inline (appare dopo la conferma) -->
-      <div id="manual-preview-wrap" class="hidden">
-        <div style="margin: 20px 0 10px; font-size:0.85rem; font-weight:600; color:#f5e6d3;">
-          Anteprima — modifica o aggiungi righe prima di generare
-        </div>
-        <div class="table-wrap">
-          <div class="table-scroll">
-            <table id="manual-preview-table"></table>
-          </div>
-        </div>
-        <button class="add-row-btn" onclick="aggiungiRigaManualPreview()" style="margin-top:10px">+ Aggiungi riga</button>
+        <button class="btn btn-primary" onclick="confermaManuale()">Conferma e prosegui →</button>
       </div>
     </div>
 
@@ -451,7 +438,7 @@
   <div class="card hidden" id="card-columns">
     <div class="card-title">
       <span class="step-badge">2</span>
-      Mappa le colonne
+      <span id="step2-title">Mappa le colonne</span>
     </div>
 
     <!-- Modalità singola (tutti i file hanno la stessa struttura) -->
@@ -558,6 +545,7 @@ const fileInput = document.getElementById('fileInput');
 const btnSelect = document.getElementById('btnSelectFile');
 
 btnSelect.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
+document.getElementById('manual-tbody').addEventListener('input', syncManualToPreview);
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
@@ -719,6 +707,7 @@ async function parsePDF(file) {
 
 // ── Column mapping — struttura unica ──────────────────────
 function setupColumnMapping() {
+  document.getElementById('step2-title').textContent = 'Mappa le colonne';
   showEl('card-columns');
   showEl('col-single');
   hideEl('col-perfile');
@@ -746,6 +735,7 @@ function setupColumnMapping() {
 
 // ── Column mapping — strutture diverse ────────────────────
 function setupPerFileMapping() {
+  document.getElementById('step2-title').textContent = 'Mappa le colonne';
   showEl('card-columns');
   hideEl('col-single');
   showEl('col-perfile');
@@ -888,12 +878,22 @@ function switchTab(tab) {
   document.getElementById('btn-tab-file').classList.toggle('active', isFile);
   document.getElementById('btn-tab-manual').classList.toggle('active', !isFile);
   clearAlert('import-alert');
-  hideEl('card-columns');
   hideEl('card-budget');
   hideEl('card-results');
-  hideEl('manual-preview-wrap');
-  if (!isFile && document.getElementById('manual-tbody').children.length === 0) {
-    for (let i = 0; i < 3; i++) addRigaManuale();
+
+  if (!isFile) {
+    // Mostra subito Step 2 in modalità anteprima
+    hideEl('col-single');
+    hideEl('col-perfile');
+    hideEl('btn-conferma-colonne');
+    document.getElementById('step2-title').textContent = 'Anteprima dati';
+    showEl('card-columns');
+    if (document.getElementById('manual-tbody').children.length === 0) {
+      for (let i = 0; i < 3; i++) addRigaManuale();
+    }
+    syncManualToPreview();
+  } else {
+    hideEl('card-columns');
   }
 }
 
@@ -904,76 +904,48 @@ function addRigaManuale() {
     <td><input class="manual-input" type="date" /></td>
     <td><input class="manual-input" type="number" placeholder="0.00" step="0.01" min="0" /></td>
     <td style="text-align:center">
-      <button class="btn-delete" onclick="this.closest('tr').remove()" title="Elimina riga">×</button>
+      <button class="btn-delete" onclick="deleteManualRow(this)">×</button>
     </td>`;
   tbody.appendChild(tr);
+  syncManualToPreview();
 }
 
-function confermaManuale() {
+function deleteManualRow(btn) {
+  btn.closest('tr').remove();
+  syncManualToPreview();
+}
+
+function syncManualToPreview() {
   const rows = document.querySelectorAll('#manual-tbody tr');
-  const parsed = [];
+  const data = [];
   let i = 0;
   for (const row of rows) {
     const inputs  = row.querySelectorAll('input');
     const rawDate = inputs[0].value.trim();
     const rawNum  = inputs[1].value.trim();
-    // Salta righe completamente vuote
     if (!rawDate && !rawNum) continue;
     const label = rawDate ? formatDate(rawDate) : `Giorno ${i + 1}`;
     const val   = parseFloat(rawNum.replace(',', '.'));
-    parsed.push({ giorno: label, minimo: isNaN(val) || val < 0 ? 0 : val });
+    data.push({ giorno: label, minimo: isNaN(val) || val < 0 ? 0 : val });
     i++;
   }
-  if (!parsed.length) {
+  giorni = data;
+  if (giorni.length) {
+    renderPreview();
+    showEl('preview-wrap');
+  } else {
+    hideEl('preview-wrap');
+  }
+}
+
+function confermaManuale() {
+  if (!giorni.length) {
     setAlert('import-alert', 'error', 'Inserisci almeno una riga.');
     return;
   }
-  giorni = parsed;
   clearAlert('import-alert');
-  renderManualPreview();
-  showEl('manual-preview-wrap');
   showEl('card-budget');
-  document.getElementById('manual-preview-wrap').scrollIntoView({ behavior: 'smooth' });
-}
-
-function renderManualPreview() {
-  const tbl = document.getElementById('manual-preview-table');
-  tbl.innerHTML = `
-    <thead>
-      <tr>
-        <th>Giorno / Data</th>
-        <th style="text-align:right">Spesa minima (€)</th>
-        <th style="text-align:center">Elimina</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${giorni.map((r, i) => `
-        <tr>
-          <td><input class="manual-input" type="date" value="${toISODate(r.giorno)}"
-            onchange="giorni[${i}].giorno = this.value ? formatDate(this.value) : giorni[${i}].giorno" /></td>
-          <td><input class="manual-input" type="number" step="0.01" min="0" value="${r.minimo.toFixed(2)}"
-            onchange="giorni[${i}].minimo = parseFloat(this.value) || 0" /></td>
-          <td style="text-align:center">
-            <button class="btn-delete" onclick="eliminaRigaManuale(${i})">×</button>
-          </td>
-        </tr>`).join('')}
-    </tbody>`;
-}
-
-function eliminaRigaManuale(index) {
-  giorni.splice(index, 1);
-  if (!giorni.length) {
-    hideEl('manual-preview-wrap');
-    hideEl('card-budget');
-    hideEl('card-results');
-    return;
-  }
-  renderManualPreview();
-}
-
-function aggiungiRigaManualPreview() {
-  giorni.push({ giorno: '', minimo: 0 });
-  renderManualPreview();
+  document.getElementById('card-budget').scrollIntoView({ behavior: 'smooth' });
 }
 
 // ── Distribution algorithm ─────────────────────────────────
