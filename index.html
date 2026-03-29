@@ -458,7 +458,7 @@
     <!-- Modalità per-file (strutture diverse) -->
     <div id="col-perfile" class="hidden"></div>
 
-    <button class="btn btn-primary" onclick="confermaColonne()">Conferma e anteprima</button>
+    <button class="btn btn-primary" id="btn-conferma-colonne" onclick="confermaColonne()">Conferma e anteprima</button>
 
     <div class="table-wrap hidden" id="preview-wrap">
       <div class="table-scroll">
@@ -709,6 +709,7 @@ function setupColumnMapping() {
   showEl('card-columns');
   showEl('col-single');
   hideEl('col-perfile');
+  showEl('btn-conferma-colonne');
   hideEl('preview-wrap');
   hideEl('btn-add-preview-row');
 
@@ -735,6 +736,7 @@ function setupPerFileMapping() {
   showEl('card-columns');
   hideEl('col-single');
   showEl('col-perfile');
+  showEl('btn-conferma-colonne');
   hideEl('preview-wrap');
   hideEl('btn-add-preview-row');
 
@@ -909,15 +911,22 @@ function confermaManuale() {
     }
   }
   if (!parsed.length) {
-    setAlert('import-alert', 'error', 'Inserisci almeno una riga con un valore valido.');
+    setAlert('import-alert', 'error', 'Inserisci almeno una riga con un valore valido (spesa ≥ 0).');
     return;
   }
   giorni = parsed;
   clearAlert('import-alert');
   setAlert('import-alert', 'success', `✓ ${giorni.length} giorni confermati.`);
-  hideEl('card-columns');
+
+  // Mostra Step 2 in modalità solo-preview (senza selettori colonne)
+  hideEl('col-single');
+  hideEl('col-perfile');
+  hideEl('btn-conferma-colonne');
+  showEl('card-columns');
+  renderPreview();
+  showEl('preview-wrap');
   showEl('card-budget');
-  document.getElementById('card-budget').scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('card-columns').scrollIntoView({ behavior: 'smooth' });
 }
 
 // ── Distribution algorithm ─────────────────────────────────
