@@ -893,7 +893,6 @@ function addRigaManuale() {
       <button class="btn-delete" onclick="this.closest('tr').remove()" title="Elimina riga">×</button>
     </td>`;
   tbody.appendChild(tr);
-  tr.querySelector('input').focus();
 }
 
 function confermaManuale() {
@@ -901,17 +900,18 @@ function confermaManuale() {
   const parsed = [];
   let i = 0;
   for (const row of rows) {
-    const inputs = row.querySelectorAll('input');
+    const inputs  = row.querySelectorAll('input');
     const rawDate = inputs[0].value.trim();
-    const label   = rawDate ? formatDate(rawDate) : `Giorno ${i + 1}`;
-    const val     = parseFloat(inputs[1].value);
-    if (!isNaN(val) && val >= 0) {
-      parsed.push({ giorno: label, minimo: val });
-      i++;
-    }
+    const rawNum  = inputs[1].value.trim();
+    // Salta righe completamente vuote
+    if (!rawDate && !rawNum) continue;
+    const label = rawDate ? formatDate(rawDate) : `Giorno ${i + 1}`;
+    const val   = parseFloat(rawNum.replace(',', '.'));
+    parsed.push({ giorno: label, minimo: isNaN(val) || val < 0 ? 0 : val });
+    i++;
   }
   if (!parsed.length) {
-    setAlert('import-alert', 'error', 'Inserisci almeno una riga con un valore valido (spesa ≥ 0).');
+    setAlert('import-alert', 'error', 'Inserisci almeno una riga.');
     return;
   }
   giorni = parsed;
