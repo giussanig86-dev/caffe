@@ -374,7 +374,7 @@
     <div id="tab-file">
       <div class="drop-zone" id="dropZone">
         <div class="dz-icon">📂</div>
-        <div class="dz-text">Trascina qui il file oppure clicca per selezionare</div>
+        <div class="dz-text">Trascina qui uno o più file oppure clicca per selezionare</div>
         <button class="btn btn-secondary" id="btnSelectFile">Sfoglia file</button>
         <div class="format-badges">
           <span class="badge badge-csv">CSV</span>
@@ -382,7 +382,7 @@
           <span class="badge badge-pdf">PDF</span>
         </div>
       </div>
-      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf">
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf" multiple>
     </div>
 
     <!-- Tab: inserimento manuale -->
@@ -519,47 +519,61 @@ dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('dragover');
-  if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+  if (e.dataTransfer.files.length) processFiles(e.dataTransfer.files);
 });
 fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) {
-    processFile(fileInput.files[0]);
+  if (fileInput.files.length) {
+    processFiles(fileInput.files);
     fileInput.value = ''; // reset so the same file can be re-selected
   }
 });
 
-// ── File dispatcher ────────────────────────────────────────
-async function processFile(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
-  setAlert('import-alert', 'warning', `Caricamento di "${file.name}"…`);
+// ── Multi-file dispatcher ──────────────────────────────────
+async function processFiles(fileList) {
+  const files = Array.from(fileList);
+  rawData = [];
+  headers = [];
+
+  const label = files.length === 1 ? `"${files[0].name}"` : `${files.length} file`;
+  setAlert('import-alert', 'warning', `Caricamento di ${label}…`);
   hideEl('card-columns');
   hideEl('card-budget');
   hideEl('card-results');
 
-  try {
-    if (ext === 'csv') {
-      await parseCSV(file);
-    } else if (ext === 'xlsx' || ext === 'xls') {
-      await parseExcel(file);
-    } else if (ext === 'pdf') {
-      await parsePDF(file);
-    } else {
-      setAlert('import-alert', 'error', 'Formato non supportato. Usa CSV, Excel (.xlsx/.xls) o PDF.');
-      return;
+  const errors  = [];
+  let hasPdfWarning = false;
+
+  for (const file of files) {
+    try {
+      const result = await parseFile(file);
+      if (!headers.length) headers = result.headers;
+      rawData.push(...result.data);
+      if (result.pdfWarning) hasPdfWarning = true;
+    } catch (err) {
+      errors.push(`${file.name}: ${err.message}`);
     }
-  } catch (err) {
-    setAlert('import-alert', 'error', 'Errore nel caricamento: ' + err.message);
-    return;
   }
 
   if (!rawData.length) {
-    setAlert('import-alert', 'error', 'Nessun dato trovato nel file. Controlla il formato.');
+    setAlert('import-alert', 'error',
+      errors.length ? 'Errori: ' + errors.join(' | ') : 'Nessun dato trovato. Controlla i file.');
     return;
   }
 
-  setAlert('import-alert', 'success',
-    `✓ ${rawData.length} righe importate da "${file.name}". Seleziona le colonne corrispondenti.`);
+  let msg = `✓ ${rawData.length} righe importate da ${label}.`;
+  if (errors.length)     msg += ` ⚠ Errori in: ${errors.map(e => e.split(':')[0]).join(', ')}.`;
+  if (hasPdfWarning)     msg += ' PDF in modalità best-effort: verifica l\'anteprima.';
+  setAlert('import-alert', errors.length ? 'warning' : 'success', msg);
   setupColumnMapping();
+}
+
+// ── Single-file parser (returns {data, headers, pdfWarning}) ─
+async function parseFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv')              return await parseCSV(file);
+  if (ext === 'xlsx' || ext === 'xls') return await parseExcel(file);
+  if (ext === 'pdf')              return await parsePDF(file);
+  throw new Error('Formato non supportato. Usa CSV, Excel (.xlsx/.xls) o PDF.');
 }
 
 // ── CSV parser ─────────────────────────────────────────────
@@ -571,9 +585,10 @@ function parseCSV(file) {
       dynamicTyping: false,
       complete: result => {
         if (!result.data.length) { reject(new Error('File CSV vuoto o non leggibile.')); return; }
-        rawData = result.data;
-        headers = result.meta.fields || Object.keys(rawData[0]);
-        resolve();
+        resolve({
+          data:    result.data,
+          headers: result.meta.fields || Object.keys(result.data[0])
+        });
       },
       error: err => reject(new Error(err.message))
     });
@@ -590,9 +605,7 @@ function parseExcel(file) {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
         if (!data.length) { reject(new Error('Foglio Excel vuoto.')); return; }
-        rawData = data;
-        headers = Object.keys(data[0]);
-        resolve();
+        resolve({ data, headers: Object.keys(data[0]) });
       } catch (err) { reject(new Error('File Excel non leggibile: ' + err.message)); }
     };
     reader.onerror = () => reject(new Error('Errore nella lettura del file.'));
@@ -605,22 +618,16 @@ async function parsePDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf    = await pdfjsLib.getDocument({ data: buffer }).promise;
 
-  // Collect text items page by page, preserving Y position groupings
   const allLines = [];
-
   for (let p = 1; p <= pdf.numPages; p++) {
     const page    = await pdf.getPage(p);
     const content = await page.getTextContent();
-
-    // Group items by rounded Y coordinate → simulates table rows
     const yMap = new Map();
     for (const item of content.items) {
       const y = Math.round(item.transform[5]);
       if (!yMap.has(y)) yMap.set(y, []);
       yMap.get(y).push(item.str.trim());
     }
-
-    // Sort by descending Y (top → bottom)
     const sortedYs = [...yMap.keys()].sort((a, b) => b - a);
     for (const y of sortedYs) {
       const line = yMap.get(y).filter(s => s).join(' ');
@@ -628,40 +635,29 @@ async function parsePDF(file) {
     }
   }
 
-  // Try to extract rows: each line needs at least 1 label and 1 numeric price
-  const rows = [];
+  const rows  = [];
   const numRe = /\d+[.,]\d{2}|\d+/g;
-
   for (const line of allLines) {
     const nums = [...line.matchAll(numRe)].map(m => parseFloat(m[0].replace(',', '.')));
     if (!nums.length) continue;
-
-    // The "giorno" is whatever text comes before the last number
     const lastNumStr  = line.match(/[\d.,]+(?=[^\d.,]*$)/);
     const giornoLabel = lastNumStr
       ? line.slice(0, line.lastIndexOf(lastNumStr[0])).trim().replace(/\s+/g, ' ')
       : line;
-
     if (!giornoLabel) continue;
-
-    const price = nums[nums.length - 1]; // last number = price
+    const price = nums[nums.length - 1];
     if (price <= 0) continue;
-
     rows.push({ Giorno: giornoLabel, 'Spesa (€)': price });
   }
 
   if (rows.length < 2) {
     throw new Error(
       'Impossibile estrarre dati tabellari sufficienti dal PDF. ' +
-      'Il parsing PDF è approssimativo: per risultati certi usa CSV o Excel.'
+      'Per risultati certi usa CSV o Excel.'
     );
   }
 
-  setAlert('import-alert', 'warning',
-    '⚠ Parsing PDF in modalità best-effort. Verifica l\'anteprima prima di procedere.');
-
-  rawData = rows;
-  headers = ['Giorno', 'Spesa (€)'];
+  return { data: rows, headers: ['Giorno', 'Spesa (€)'], pdfWarning: true };
 }
 
 // ── Column mapping ─────────────────────────────────────────
