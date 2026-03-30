@@ -499,6 +499,7 @@ let parsedFiles  = [];     // [{name, data, headers}] — one entry per imported
 let singleMapping = true;  // true = tutti i file hanno le stesse colonne
 let giorni       = [];     // [{giorno:string, minimo:number}]
 let risultati    = [];     // [{giorno, minimo, assegnato}]
+let _nextRowId   = 0;      // ID univoco per le righe di Step 2
 
 // ── Drag & drop + file input ───────────────────────────────
 const dropZone  = document.getElementById('dropZone');
@@ -766,8 +767,6 @@ function estraiGiorni(data, colG, colS) {
 }
 
 // ── Step 2: tabella editabile (ID-based, no full re-render) ─
-let _nextRowId = 0;
-
 function _appendRow(id, giorno, minimo) {
   const tbody = document.getElementById('data-tbody');
   const tr = document.createElement('tr');
